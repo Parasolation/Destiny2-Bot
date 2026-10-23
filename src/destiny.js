@@ -6,6 +6,8 @@ import { buildCraftingIndex, patternProgress, craftingPage } from './crafting.js
 import { buildPatternSources } from './crafting-sources.js';
 import { buildEquipmentIndex, equipmentSearch } from './equipment.js';
 import { StarsideRecommendations } from './starside.js';
+import { GuardianReports } from './guardian-reports.js';
+import { buildReportCatalog } from './report-data.js';
 
 const ORIGIN = 'https://www.bungie.net';
 const compact = value => String(value || '').normalize('NFKC').toLowerCase().replace(/\s+/g, '');
@@ -32,10 +34,14 @@ export class DestinyService {
     this.file = path.join(directory, `manifest-${config.language || 'zh-chs'}.json`); this.index = null;
     this.cache = new CachedRequests();
     this.recommendations = recommendations;
+    this.reports = new GuardianReports(this);
   }
   async api(endpoint, options = {}) {
     if (!this.config.apiKey) throw new UserError('尚未配置 Bungie API Key。请在笔记本的 config.json 中填写，然后运行 05-sync-destiny.cmd。');
-    const payload = await this.request(`${ORIGIN}/Platform${endpoint}`, { ...options,
+    // Bungie's PGCR endpoint redirects to stats.bungie.net (historically over HTTP).
+    // Use the verified HTTPS endpoint directly, keeping redirect:'error' everywhere.
+    const origin = /^\/Destiny2\/Stats\/PostGameCarnageReport\/\d{1,20}\/$/.test(endpoint) ? 'https://stats.bungie.net' : ORIGIN;
+    const payload = await this.request(`${origin}/Platform${endpoint}`, { ...options,
       headers: { 'X-API-Key': this.config.apiKey, 'User-Agent': 'GuardianQQBot/0.1', 'Content-Type': 'application/json', ...options.headers } });
     if (payload.ErrorCode !== 1) throw new UserError(`Bungie 查询未成功（${payload.ErrorStatus || payload.ErrorCode}），可能正在维护、资料未公开或已限流。`);
     return payload.Response;
@@ -51,7 +57,7 @@ export class DestinyService {
     const components = manifest.jsonWorldComponentContentPaths?.[this.config.language || 'zh-chs'];
     if (!components) throw new UserError('Bungie 暂未提供所选语言的数据库。');
     const tables = {};
-    for (const name of ['DestinyInventoryItemDefinition', 'DestinySandboxPerkDefinition', 'DestinyStatDefinition', 'DestinyRecordDefinition', 'DestinyObjectiveDefinition', 'DestinyCollectibleDefinition', 'DestinyPresentationNodeDefinition', 'DestinyActivityDefinition', 'DestinySeasonDefinition', 'DestinyPlugSetDefinition']) {
+    for (const name of ['DestinyInventoryItemDefinition', 'DestinySandboxPerkDefinition', 'DestinyStatDefinition', 'DestinyRecordDefinition', 'DestinyObjectiveDefinition', 'DestinyCollectibleDefinition', 'DestinyPresentationNodeDefinition', 'DestinyActivityDefinition', 'DestinySeasonDefinition', 'DestinyPlugSetDefinition', 'DestinyMilestoneDefinition']) {
       const location = new URL(components[name], ORIGIN);
       if (location.origin !== ORIGIN || !location.pathname.startsWith('/common/')) throw new UserError('Bungie 数据库地址异常。');
       log(`正在下载 ${name}，首次下载可能需要几分钟……`);
@@ -62,7 +68,7 @@ export class DestinyService {
       patterns: buildCraftingIndex(tables.DestinyRecordDefinition, tables.DestinyObjectiveDefinition, buildPatternSources({
         items: tables.DestinyInventoryItemDefinition, collectibles: tables.DestinyCollectibleDefinition, nodes: tables.DestinyPresentationNodeDefinition,
         activities: tables.DestinyActivityDefinition, seasons: tables.DestinySeasonDefinition })),
-      craftingLayoutVersion: 1,
+      ...buildReportCatalog(tables), craftingLayoutVersion: 1,
       version: manifest.version, syncedAt: Date.now(), language: this.config.language || 'zh-chs' };
     if (!index.weapons.length || !index.perks.length || !index.patterns.length) throw new UserError('Bungie 返回的数据库为空，保留原缓存。');
     await mkdir(this.directory, { recursive: true });

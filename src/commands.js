@@ -11,6 +11,20 @@ export function parseCommand(input) {
   if (page < 1 || page > 50) throw new UserError('页码范围是 1–50。');
   if (/^(帮助|菜单|help)$/i.test(text)) return { type: 'help' };
   if (/^(状态|status)$/i.test(text)) return { type: 'status' };
+  if (/^(周报|本周|周活动)$/.test(text)) return { type: 'weekly' };
+  if (/^(上一局|最近一局)$/.test(text)) return {type:'lastMatch',keyword:''};
+  const report = text.match(/^(pvp(?:战绩)?|pve(?:战绩)?|战绩|近期战绩|近期对局|突袭(?:战绩)?|地牢(?:战绩)?|试炼(?:战绩)?|奥西里斯试炼|智谋(?:战绩)?|日落(?:战绩)?|铁旗(?:战绩)?)(?:\s+(.+))?$/i);
+  if (report) {
+    const name = report[1].toLowerCase();
+    const mode = name.startsWith('pvp') ? 'pvp' : name.startsWith('pve') ? 'pve' : name.startsWith('突袭') ? 'raid' : name.startsWith('地牢') ? 'dungeon' : /试炼/.test(name) ? 'trials' : name.startsWith('智谋') ? 'gambit' : name.startsWith('日落') ? 'nightfall' : name.startsWith('铁旗') ? 'iron' : 'all';
+    return { type:'combat',mode,keyword:report[2] || '',page };
+  }
+  const personal = text.match(/^(生涯|热力图|配装|装备|队伍)(?:\s+(.+))?$/);
+  if (personal) return { type: ({生涯:'career',热力图:'heatmap',配装:'loadout',装备:'loadout',队伍:'team'})[personal[1]],keyword:personal[2] || '',page };
+  const records = text.match(/^(成就|称号|收藏)(?:\s+(.+))?$/);
+  if (records) return { type:'records',kind:({成就:'records',称号:'titles',收藏:'collection'})[records[1]],keyword:records[2] || '',page };
+  const match = text.match(/^(对局|战报)(?:\s+(.+))?$/);
+  if (match) return {type:'match',keyword:match[2] || ''};
   if (/^(绑定|我的绑定)$/.test(text)) return { type: 'binding' };
   if (/^(解绑|取消绑定)$/.test(text)) return { type: 'unbind' };
   const bind = text.match(/^绑定\s+(.+)$/);
@@ -31,9 +45,11 @@ export function parseCommand(input) {
 }
 
 export function helpCard() {
-  return { title: '守护者的群聊工具箱', label: '使用帮助', subtitle: '在群里 @机器人，然后输入下面的指令', source: '本地帮助 · v0.4', compact: true,
+  return { title: '守护者的群聊工具箱', label: '使用帮助', subtitle: '在群里 @机器人，然后输入下面的指令', source: '本地帮助 · v0.5', compact: true,
     rows: [
       { title: '先绑定，再查自己的进度', text: '绑定 Bungie名称#1234\n玩家　/　锻造　/　可锻造\n我的绑定　/　解绑', meta: '在当前群内按发送者记住账号，重启后仍保留。' },
+      { title: '战绩与副本报告', text: 'PVP　/　PVE　/　战绩\n突袭　/　地牢　/　试炼　/　铁旗\n智谋　/　日落　/　上一局　/　对局 活动编号', meta: '最近 20 场一张长图；追加「第2页」翻页，最多 5 页。' },
+      { title: '守护者档案', text: '生涯　/　热力图　/　配装　/　队伍\n称号　/　成就 关键词　/　收藏 关键词\n周报', meta: '战绩、生涯、热力图、配装和队伍可追加 Bungie名称#1234 查其他公开账号。' },
       { title: '命运 2 武器与图样', text: '武器 武器名称　/　Perk 词条名称\n锻造 武器名或副本名　/　锻造 进行中\n锻造 未解锁　/　可锻造', meta: '武器显示大图、属性与词条池；锻造按副本、赛季分组合成长图。' },
       { title: '玩机器烂梗与实时弹幕', text: '热门　/　周榜　/　随机\n搜索 关键词　/　实时', meta: '列表最多 20 条；随机 5 条。来源不足时按实际数量展示。' },
       { title: '翻页与运行状态', text: '周榜 第2页　/　搜索 关键词 第2页\n状态', meta: '全部图片回复；较长内容会分图。' },
@@ -73,7 +89,7 @@ export async function queryCard(command, { memes, destiny, live, config, binding
     const player = await destiny.resolvePlayer(command.keyword);
     await bindings.set(userKey, player);
     return { title: '绑定成功', label: 'DESTINY 2', source: '本地账号绑定', rows: [{ title: player.displayName,
-      text: '以后直接发送「玩家」「锻造」「可锻造」即可。', meta: '当前群内为你保存的查询账号，重启后仍保留。' }], notice: '发送「我的绑定」查看，发送「解绑」移除。' };
+      text: '以后直接发送「PVP」「PVE」「突袭」「地牢」「生涯」「配装」「锻造」即可。', meta: '当前群内为你保存的查询账号，重启后仍保留。' }], notice: '发送「帮助」查看完整菜单；「我的绑定」查看，「解绑」移除。' };
   }
   if (command.type === 'binding') {
     const binding = await getBinding();
@@ -85,6 +101,11 @@ export async function queryCard(command, { memes, destiny, live, config, binding
     return { title: '已解除绑定', label: 'DESTINY 2', source: '本地账号绑定', rows: [{ text: '已清除你在这里保存的查询账号。其他群成员的绑定不受影响。' }] };
   }
   if (command.type === 'crafting') return craftingCard(await destiny.crafting(await getBinding(), command.filter, command.page), command);
+  if (command.type === 'weekly') return destiny.reports.weekly();
+  if (command.type === 'match') return destiny.reports.match(command.keyword);
+  if (command.type === 'combat') return destiny.reports.combat(command.keyword || await getBinding(),command.mode,command.page);
+  if (['career','heatmap','loadout','team','lastMatch'].includes(command.type)) return destiny.reports[command.type](command.keyword || await getBinding());
+  if (command.type === 'records') return destiny.reports.records(await getBinding(),command.kind,command.keyword,command.page);
   if (command.type === 'status') {
     let index;
     try { index = await destiny.load(); } catch {}
