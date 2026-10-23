@@ -68,7 +68,7 @@ test('website API maps documented schemas without confusing copy count with live
   let calls = 0;
   const service = new MemeService({ request: async (url, opts) => {
     calls++; assert.equal(url, 'https://api.hguofichp.cn/machine/pageSearch');
-    assert.deepEqual(JSON.parse(opts.body), { barrage: '好枪', pageNum: 2, pageSize: 8, sort: 0 });
+    assert.deepEqual(JSON.parse(opts.body), { barrage: '好枪', pageNum: 2, pageSize: 20, sort: 0 });
     assert.equal(opts.headers.dpahjdoiaw, undefined);
     return { code: 200, data: { list: [{ id: 3, barrage: '好枪', cnt: 8 }], total: 10 } };
   } });
@@ -92,12 +92,12 @@ test('manifest index and public character query use correct Bungie paths and Cro
   const destiny = new DestinyService({ apiKey: 'test-key' }, { request: async (url, opts) => {
     calls.push(url); assert.equal(opts.headers['X-API-Key'], 'test-key');
     return { ErrorCode: 1, Response: calls.length === 1 ? [
-      { membershipId: 'xbox', membershipType: 1, crossSaveOverride: 3 },
-      { membershipId: 'steam', membershipType: 3, crossSaveOverride: 3 },
+      { membershipId: '111', membershipType: 1, crossSaveOverride: 3 },
+      { membershipId: '333', membershipType: 3, crossSaveOverride: 3 },
     ] : { characters: { data: { a: { classType: 1, light: 123 } } } } };
   } });
   assert.equal((await destiny.player('测试#1234')).characters.length, 1);
-  assert.match(calls[1], /\/Destiny2\/3\/Profile\/steam\/\?components=100,200$/);
+  assert.match(calls[1], /\/Destiny2\/3\/Profile\/333\/\?components=100,200$/);
   await assert.rejects(destiny.player('没有编号'), UserError);
 });
 

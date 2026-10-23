@@ -2,6 +2,7 @@ import { readFile, writeFile, mkdir, rename } from 'node:fs/promises';
 import path from 'node:path';
 import { DATA } from './config.js';
 import { CachedRequests, jsonRequest, UserError } from './http.js';
+import { buildCraftingIndex, patternProgress, craftingPage } from './crafting.js';
 
 const ORIGIN = 'https://www.bungie.net';
 const compact = value => String(value || '').normalize('NFKC').toLowerCase().replace(/\s+/g, '');
@@ -46,20 +47,21 @@ export class DestinyService {
     const components = manifest.jsonWorldComponentContentPaths?.[this.config.language || 'zh-chs'];
     if (!components) throw new UserError('Bungie 暂未提供所选语言的数据库。');
     const tables = {};
-    for (const name of ['DestinyInventoryItemDefinition', 'DestinySandboxPerkDefinition', 'DestinyStatDefinition']) {
+    for (const name of ['DestinyInventoryItemDefinition', 'DestinySandboxPerkDefinition', 'DestinyStatDefinition', 'DestinyRecordDefinition', 'DestinyObjectiveDefinition']) {
       const location = new URL(components[name], ORIGIN);
       if (location.origin !== ORIGIN || !location.pathname.startsWith('/common/')) throw new UserError('Bungie 数据库地址异常。');
       log(`正在下载 ${name}，首次下载可能需要几分钟……`);
       tables[name] = await this.request(location.href, { timeout: 180000, maxBytes: 300_000_000 });
     }
     const index = { ...buildIndex(tables.DestinyInventoryItemDefinition, tables.DestinySandboxPerkDefinition, tables.DestinyStatDefinition),
+      patterns: buildCraftingIndex(tables.DestinyRecordDefinition, tables.DestinyObjectiveDefinition),
       version: manifest.version, syncedAt: Date.now(), language: this.config.language || 'zh-chs' };
-    if (!index.weapons.length || !index.perks.length) throw new UserError('Bungie 返回的数据库为空，保留原缓存。');
+    if (!index.weapons.length || !index.perks.length || !index.patterns.length) throw new UserError('Bungie 返回的数据库为空，保留原缓存。');
     await mkdir(this.directory, { recursive: true });
     await writeFile(this.file + '.tmp', JSON.stringify(index), 'utf8');
     await rename(this.file + '.tmp', this.file);
     this.index = index;
-    log(`同步完成：${index.weapons.length} 件武器、${index.perks.length} 条 Perk / 插槽资料。`);
+    log(`同步完成：${index.weapons.length} 件武器、${index.perks.length} 条 Perk / 插槽资料、${index.patterns.length} 个武器图样。`);
     return index;
   }
   async search(kind, term, page = 1) {
@@ -69,18 +71,41 @@ export class DestinyService {
       .sort((a, b) => Number(compact(b.name) === query) - Number(compact(a.name) === query) || a.name.localeCompare(b.name));
     return { rows: matches.slice((page - 1) * 6, page * 6), total: matches.length, index };
   }
-  async player(name) {
+  async resolvePlayer(name) {
     const match = name.match(/^(.+)#(\d{4})$/);
     if (!match) throw new UserError('请使用完整 Bungie 名称，例如：玩家 守护者#1234');
-    return this.cache.get(`player:${name}`, 60000, async () => {
+    return this.cache.get(`resolve:${name}`, 60000, async () => {
       const players = await this.api('/Destiny2/SearchDestinyPlayerByBungieName/-1/', { method: 'POST',
         body: JSON.stringify({ displayName: match[1], displayNameCode: Number(match[2]) }) });
       if (!players?.length) throw new UserError('未找到该玩家，请确认 Bungie 名称和四位编号。');
       const player = players.find(x => x.membershipType === x.crossSaveOverride) || players[0];
-      const profile = await this.api(`/Destiny2/${player.membershipType}/Profile/${player.membershipId}/?components=100,200`);
+      this.validateMembership(player);
+      return { membershipId: player.membershipId, membershipType: player.membershipType,
+        displayName: player.bungieGlobalDisplayName && player.bungieGlobalDisplayNameCode != null
+          ? `${player.bungieGlobalDisplayName}#${String(player.bungieGlobalDisplayNameCode).padStart(4, '0')}` : name };
+    });
+  }
+  validateMembership(player) {
+    if (!/^\d+$/.test(String(player?.membershipId)) || ![1, 2, 3, 5, 6].includes(player?.membershipType)) throw new UserError('Bungie 返回的玩家平台信息不完整，请稍后重试。');
+  }
+  async profile(player, components) {
+    this.validateMembership(player);
+    return this.cache.get(`profile:${player.membershipType}:${player.membershipId}:${components}`, 60000,
+      () => this.api(`/Destiny2/${player.membershipType}/Profile/${player.membershipId}/?components=${components}`));
+  }
+  async player(nameOrBinding) {
+      const player = typeof nameOrBinding === 'string' ? await this.resolvePlayer(nameOrBinding) : nameOrBinding;
+      const profile = await this.profile(player, '100,200');
       const characters = Object.values(profile.characters?.data || {});
       if (!characters.length) throw new UserError('玩家资料未公开或没有可用角色；当前版本仅查询公开资料。');
       return { player, characters, at: Date.now() };
-    });
+  }
+  async crafting(player, filter = '', page = 1) {
+    const index = await this.load();
+    if (!index.patterns?.length) throw new UserError('本地图样数据库需要更新，请运行 05-sync-destiny.cmd 并重启机器人。');
+    const profile = await this.profile(player, '100,900');
+    const result = craftingPage(patternProgress(index.patterns, profile), filter, page);
+    const minted = Date.parse(profile.secondaryComponentsMintedTimestamp || profile.responseMintedTimestamp);
+    return { ...result, at: Number.isFinite(minted) ? minted : Date.now(), player };
   }
 }

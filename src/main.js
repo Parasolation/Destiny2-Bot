@@ -7,6 +7,7 @@ import { MemeService } from './memes.js';
 import { DestinyService } from './destiny.js';
 import { LiveStats, startCollector } from './live.js';
 import { Admission, createMessageHandler, errorCard } from './runtime.js';
+import { BindingStore } from './bindings.js';
 
 let renderer, bot, stopCollector, lock, lockOwned = false;
 const lockPath = path.join(DATA, 'bot.lock');
@@ -52,7 +53,8 @@ try {
     error: await renderer.render(errorCard('图片排版暂时失败，请稍后再试或重启机器人。')),
   };
   const live = new LiveStats(config.douyu);
-  const services = { config, live, memes: new MemeService(), destiny: new DestinyService(config.bungie) };
+  const bindings = new BindingStore(); await bindings.load();
+  const services = { config, live, bindings, memes: new MemeService(), destiny: new DestinyService(config.bungie) };
   bot = new QQBot({ appId: config.qq.appId, appSecret: config.qq.appSecret, transport: 'websocket', markdownSupport: false,
     // Restrict subscriptions to group @ messages and C2C; do not request unrelated guild events.
     intents: 1 << 25,

@@ -1,5 +1,8 @@
 import { CachedRequests, jsonRequest, UserError } from './http.js';
 
+export const MEME_PAGE_SIZE = 20;
+export const RANDOM_COUNT = 5;
+
 export function parseMemes(payload) {
   if (payload.code !== 200) throw new UserError('6657 烂梗库暂时不可用，或接口需要登录。请稍后重试。');
   const data = payload.data;
@@ -19,14 +22,21 @@ export class MemeService {
     const run = async () => {
       const options = mode === 'search' ? {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ barrage: keyword, pageNum: page, pageSize: 8, sort: 0 }),
+        body: JSON.stringify({ barrage: keyword, pageNum: page, pageSize: MEME_PAGE_SIZE, sort: 0 }),
       } : {};
       // Do not impersonate the website with its dpahjdoiaw attribution header.
       const payload = await this.request(`https://api.hguofichp.cn${paths[mode]}`, options);
       const rows = parseMemes(payload);
-      return { rows: mode === 'hot' || mode === 'week' ? rows.slice((page - 1) * 8, page * 8) : rows.slice(0, 8),
+      return { rows: mode === 'hot' || mode === 'week' ? rows.slice((page - 1) * MEME_PAGE_SIZE, page * MEME_PAGE_SIZE) : rows.slice(0, MEME_PAGE_SIZE),
         fetchedAt: Date.now(), total: payload.data?.total ?? rows.length };
     };
-    return mode === 'random' ? run() : this.cache.get(`${mode}:${keyword}:${page}`, 60000, run);
+    if (mode !== 'random') return this.cache.get(`${mode}:${keyword}:${page}`, 60000, run);
+    const unique = new Map();
+    // Bound requests when the source repeats results; never invent extra rows.
+    for (let attempt = 0; attempt < RANDOM_COUNT + 3 && unique.size < RANDOM_COUNT; attempt++) {
+      const result = await run();
+      for (const row of result.rows) unique.set(row.text, row);
+    }
+    return { rows: [...unique.values()].slice(0, RANDOM_COUNT), fetchedAt: Date.now(), total: unique.size };
   }
 }

@@ -28,7 +28,7 @@ export function normalizeDanmaku(value) {
 }
 
 export class LiveStats {
-  constructor({ windowMinutes = 5, topN = 8, blockedWords = [], maxMessages = 120000, clock = Date.now } = {}) {
+  constructor({ windowMinutes = 5, topN = 20, blockedWords = [], maxMessages = 120000, clock = Date.now } = {}) {
     Object.assign(this, { windowMinutes, topN, maxMessages, clock });
     this.blockedWords = blockedWords.map(normalizeDanmaku).filter(Boolean);
     this.messages = []; this.ids = new Map(); this.connected = false; this.connectedSince = 0;

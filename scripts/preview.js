@@ -2,7 +2,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { loadConfig, OUTPUT } from '../src/config.js';
 import { CardRenderer } from '../src/cards.js';
-import { helpCard, liveCard } from '../src/commands.js';
+import { helpCard, liveCard, craftingCard } from '../src/commands.js';
 import { errorCard } from '../src/runtime.js';
 const config = await loadConfig(); const renderer = new CardRenderer(config.botName);
 try {
@@ -10,6 +10,9 @@ try {
   const at = Date.now();
   const cards = {
     help: helpCard(),
+    'crafting-demo': { ...craftingCard({ player: { displayName: '演示守护者#1234' }, at, unlocked: 8, locked: 11, unknown: 1, total: 20,
+      rows: Array.from({ length: 20 }, (_, i) => ({ name: `示例武器 ${i + 1}`, known: i !== 19, unlocked: i >= 11 && i < 19,
+        progress: i === 19 ? null : i >= 11 ? 5 : i % 5, target: i === 19 ? null : 5 })) }, { filter: '', page: 1 }), demo: true, source: '本地图样进度样式演示' },
     'live-demo': { ...liveCard({ connected: true, state: '采集中', count: 1248, users: 316, at, start: at - 300000, complete: true,
       rows: [{ text: '这波配合太漂亮了！', users: 86, count: 132 }, { text: '先别急，残局还有机会', users: 51, count: 74 }, { text: '今天这个手感可以', users: 39, count: 58 },
         { text: '好枪！这一下真的关键', users: 28, count: 42 }] }, config.douyu), demo: true },

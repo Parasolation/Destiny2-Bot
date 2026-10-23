@@ -13,7 +13,7 @@
     "enabled": true,
     "roomId": "6657",
     "windowMinutes": 5,
-    "topN": 8,
+    "topN": 20,
     "blockedWords": []
   },
   "limits": {

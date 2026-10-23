@@ -11,11 +11,11 @@ export function validateConfig(c, { requireQQ = false } = {}) {
   c.botName = String(c.botName || '守护者助手').slice(0, 30);
   c.qq ??= {};
   c.bungie ??= {};
-  c.douyu = { enabled: true, roomId: '6657', windowMinutes: 5, topN: 8, blockedWords: [], ...c.douyu };
+  c.douyu = { enabled: true, roomId: '6657', windowMinutes: 5, topN: 20, blockedWords: [], ...c.douyu };
   c.limits = { perUserCooldownSeconds: 10, maxPendingQueries: 8, ...c.limits };
   for (const [value, min, max, label] of [
     [c.douyu.windowMinutes, 1, 30, 'windowMinutes'],
-    [c.douyu.topN, 1, 10, 'topN'],
+    [c.douyu.topN, 1, 30, 'topN'],
     [c.limits.perUserCooldownSeconds, 1, 300, 'perUserCooldownSeconds'],
     [c.limits.maxPendingQueries, 1, 20, 'maxPendingQueries'],
   ]) if (!Number.isInteger(value) || value < min || value > max) throw new Error(`${label} 必须是 ${min}–${max} 的整数。`);
