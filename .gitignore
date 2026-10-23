@@ -1,0 +1,8 @@
+node_modules/
+config.json
+data/
+logs/
+output/
+.local-browsers/
+.npm-cache/
+*.zip
