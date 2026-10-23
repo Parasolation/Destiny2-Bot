@@ -5,6 +5,7 @@ import { CachedRequests, jsonRequest, UserError } from './http.js';
 import { buildCraftingIndex, patternProgress, craftingPage } from './crafting.js';
 import { buildPatternSources } from './crafting-sources.js';
 import { buildEquipmentIndex, equipmentSearch } from './equipment.js';
+import { StarsideRecommendations } from './starside.js';
 
 const ORIGIN = 'https://www.bungie.net';
 const compact = value => String(value || '').normalize('NFKC').toLowerCase().replace(/\s+/g, '');
@@ -26,10 +27,11 @@ export function buildIndex(items, perks, stats) {
 }
 
 export class DestinyService {
-  constructor(config, { request = jsonRequest, directory = DATA } = {}) {
+  constructor(config, { request = jsonRequest, directory = DATA, recommendations = new StarsideRecommendations({ directory }) } = {}) {
     this.config = config; this.request = request; this.directory = directory;
     this.file = path.join(directory, `manifest-${config.language || 'zh-chs'}.json`); this.index = null;
     this.cache = new CachedRequests();
+    this.recommendations = recommendations;
   }
   async api(endpoint, options = {}) {
     if (!this.config.apiKey) throw new UserError('尚未配置 Bungie API Key。请在笔记本的 config.json 中填写，然后运行 05-sync-destiny.cmd。');
@@ -72,7 +74,11 @@ export class DestinyService {
   }
   async search(kind, term, page = 1) {
     const index = await this.load(); const query = compact(term);
-    if (index.equipmentVersion && index.equipment && index.weaponPerks) return equipmentSearch(index, kind, term, page);
+    if (index.equipmentVersion && index.equipment && index.weaponPerks) {
+      const result = equipmentSearch(index, kind, term, page);
+      if (kind === 'weapon' && this.recommendations) result.rows = await this.recommendations.annotate(result.rows);
+      return result;
+    }
     const collection = kind === 'weapon' ? index.weapons : index.perks;
     const matches = collection.filter(x => x.hash === term || compact(x.name).includes(query))
       .sort((a, b) => Number(compact(b.name) === query) - Number(compact(a.name) === query) || a.name.localeCompare(b.name));

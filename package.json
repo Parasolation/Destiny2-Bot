@@ -1,6 +1,6 @@
 {
   "name": "guardian-qq-bot",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "private": true,
   "type": "module",
   "description": "QQ 官方机器人：命运 2 查询与 6657 热门、实时弹幕，统一图片回复",
