@@ -4,6 +4,7 @@ import { DATA } from './config.js';
 import { CachedRequests, jsonRequest, UserError } from './http.js';
 import { buildCraftingIndex, patternProgress, craftingPage } from './crafting.js';
 import { buildPatternSources } from './crafting-sources.js';
+import { buildEquipmentIndex, equipmentSearch } from './equipment.js';
 
 const ORIGIN = 'https://www.bungie.net';
 const compact = value => String(value || '').normalize('NFKC').toLowerCase().replace(/\s+/g, '');
@@ -48,13 +49,14 @@ export class DestinyService {
     const components = manifest.jsonWorldComponentContentPaths?.[this.config.language || 'zh-chs'];
     if (!components) throw new UserError('Bungie 暂未提供所选语言的数据库。');
     const tables = {};
-    for (const name of ['DestinyInventoryItemDefinition', 'DestinySandboxPerkDefinition', 'DestinyStatDefinition', 'DestinyRecordDefinition', 'DestinyObjectiveDefinition', 'DestinyCollectibleDefinition', 'DestinyPresentationNodeDefinition', 'DestinyActivityDefinition', 'DestinySeasonDefinition']) {
+    for (const name of ['DestinyInventoryItemDefinition', 'DestinySandboxPerkDefinition', 'DestinyStatDefinition', 'DestinyRecordDefinition', 'DestinyObjectiveDefinition', 'DestinyCollectibleDefinition', 'DestinyPresentationNodeDefinition', 'DestinyActivityDefinition', 'DestinySeasonDefinition', 'DestinyPlugSetDefinition']) {
       const location = new URL(components[name], ORIGIN);
       if (location.origin !== ORIGIN || !location.pathname.startsWith('/common/')) throw new UserError('Bungie 数据库地址异常。');
       log(`正在下载 ${name}，首次下载可能需要几分钟……`);
       tables[name] = await this.request(location.href, { timeout: 180000, maxBytes: 300_000_000 });
     }
     const index = { ...buildIndex(tables.DestinyInventoryItemDefinition, tables.DestinySandboxPerkDefinition, tables.DestinyStatDefinition),
+      ...buildEquipmentIndex(tables.DestinyInventoryItemDefinition, tables.DestinyPlugSetDefinition, tables.DestinyStatDefinition, tables.DestinyCollectibleDefinition),
       patterns: buildCraftingIndex(tables.DestinyRecordDefinition, tables.DestinyObjectiveDefinition, buildPatternSources({
         items: tables.DestinyInventoryItemDefinition, collectibles: tables.DestinyCollectibleDefinition, nodes: tables.DestinyPresentationNodeDefinition,
         activities: tables.DestinyActivityDefinition, seasons: tables.DestinySeasonDefinition })),
@@ -70,6 +72,7 @@ export class DestinyService {
   }
   async search(kind, term, page = 1) {
     const index = await this.load(); const query = compact(term);
+    if (index.equipmentVersion && index.equipment && index.weaponPerks) return equipmentSearch(index, kind, term, page);
     const collection = kind === 'weapon' ? index.weapons : index.perks;
     const matches = collection.filter(x => x.hash === term || compact(x.name).includes(query))
       .sort((a, b) => Number(compact(b.name) === query) - Number(compact(a.name) === query) || a.name.localeCompare(b.name));

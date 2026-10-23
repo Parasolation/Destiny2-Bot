@@ -31,10 +31,10 @@ export function parseCommand(input) {
 }
 
 export function helpCard() {
-  return { title: '守护者的群聊工具箱', label: '使用帮助', subtitle: '在群里 @机器人，然后输入下面的指令', source: '本地帮助 · v0.3', compact: true,
+  return { title: '守护者的群聊工具箱', label: '使用帮助', subtitle: '在群里 @机器人，然后输入下面的指令', source: '本地帮助 · v0.4', compact: true,
     rows: [
       { title: '先绑定，再查自己的进度', text: '绑定 Bungie名称#1234\n玩家　/　锻造　/　可锻造\n我的绑定　/　解绑', meta: '在当前群内按发送者记住账号，重启后仍保留。' },
-      { title: '命运 2 武器与图样', text: '武器 武器名称　/　Perk 词条名称\n锻造 武器名或副本名　/　锻造 进行中\n锻造 未解锁　/　可锻造', meta: '锻造按副本、赛季分组，带背景和武器图标，全部合成一张长图。' },
+      { title: '命运 2 武器与图样', text: '武器 武器名称　/　Perk 词条名称\n锻造 武器名或副本名　/　锻造 进行中\n锻造 未解锁　/　可锻造', meta: '武器显示大图、属性与词条池；锻造按副本、赛季分组合成长图。' },
       { title: '玩机器烂梗与实时弹幕', text: '热门　/　周榜　/　随机\n搜索 关键词　/　实时', meta: '列表最多 20 条；随机 5 条。来源不足时按实际数量展示。' },
       { title: '翻页与运行状态', text: '周榜 第2页　/　搜索 关键词 第2页\n状态', meta: '全部图片回复；较长内容会分图。' },
     ] };
@@ -112,7 +112,10 @@ export async function queryCard(command, { memes, destiny, live, config, binding
       rows: characters.map(c => ({ title: ({ 0: '泰坦', 1: '猎人', 2: '术士' })[c.classType] || '角色', text: `光等 ${c.light ?? '未知'}\n累计游玩 ${Math.floor(Number(c.minutesPlayedTotal || 0) / 60)} 小时`,
         meta: c.dateLastPlayed ? `最后游玩 ${dateTime(new Date(c.dateLastPlayed))}` : '' })), notice: '只展示公开资料；此版本尚未接入私人账号授权。' };
   }
-  const { rows, total, index } = await destiny.search(command.type, command.keyword, command.page);
+  const result = await destiny.search(command.type, command.keyword, command.page);
+  const { rows, total, index } = result;
+  if (index.equipmentVersion) return { layout: command.type === 'weapon' ? 'weapon-detail' : 'perk-detail', keyword: command.keyword,
+    items: rows, total, at: index.syncedAt, page: command.page, pages: result.pages };
   const kind = command.type === 'weapon' ? '武器' : 'Perk / 插槽';
   return { title: `${kind} · ${command.keyword}`, label: 'DESTINY 2', at: index.syncedAt,
     subtitle: `找到 ${total} 条 · 第 ${command.page} 页 · 每页最多 6 条`, source: 'Bungie 官方 Manifest · 本地同步数据库',
