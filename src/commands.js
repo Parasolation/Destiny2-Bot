@@ -1,7 +1,6 @@
 import { UserError } from './http.js';
 import { dateTime } from './cards.js';
 import { MEME_PAGE_SIZE } from './memes.js';
-import { CRAFTING_PAGE_SIZE } from './crafting.js';
 
 export function parseCommand(input) {
   let text = String(input ?? '').replace(/<@!?[^>]+>/g, '').trim().replace(/^[/／]/, '').trim();
@@ -32,10 +31,10 @@ export function parseCommand(input) {
 }
 
 export function helpCard() {
-  return { title: '守护者的群聊工具箱', label: '使用帮助', subtitle: '在群里 @机器人，然后输入下面的指令', source: '本地帮助 · v0.2', compact: true,
+  return { title: '守护者的群聊工具箱', label: '使用帮助', subtitle: '在群里 @机器人，然后输入下面的指令', source: '本地帮助 · v0.3', compact: true,
     rows: [
       { title: '先绑定，再查自己的进度', text: '绑定 Bungie名称#1234\n玩家　/　锻造　/　可锻造\n我的绑定　/　解绑', meta: '在当前群内按发送者记住账号，重启后仍保留。' },
-      { title: '命运 2 武器与图样', text: '武器 武器名称　/　Perk 词条名称\n锻造 武器名称　/　锻造 进行中\n锻造 未解锁　/　锻造 第2页', meta: '锻造查看红框图样进度；无需再次填写玩家名。' },
+      { title: '命运 2 武器与图样', text: '武器 武器名称　/　Perk 词条名称\n锻造 武器名或副本名　/　锻造 进行中\n锻造 未解锁　/　可锻造', meta: '锻造按副本、赛季分组，带背景和武器图标，全部合成一张长图。' },
       { title: '玩机器烂梗与实时弹幕', text: '热门　/　周榜　/　随机\n搜索 关键词　/　实时', meta: '列表最多 20 条；随机 5 条。来源不足时按实际数量展示。' },
       { title: '翻页与运行状态', text: '周榜 第2页　/　搜索 关键词 第2页\n状态', meta: '全部图片回复；较长内容会分图。' },
     ] };
@@ -53,13 +52,11 @@ export function liveCard(snapshot, config) {
 }
 
 export function craftingCard(result, command) {
-  return { title: '武器图样 · 锻造进度', label: 'DESTINY 2', compact: true, at: result.at,
-    subtitle: `${result.player.displayName}\n${command.filter || '全部图样'} · 第 ${command.page} 页 / 共 ${Math.max(1, Math.ceil(result.total / CRAFTING_PAGE_SIZE))} 页 · 本类 ${result.total} 件`,
-    source: 'Bungie 官方 API · 公开图样记录',
-    stats: [{ label: '图样已解锁', value: result.unlocked }, { label: '尚未解锁', value: result.locked }, { label: '未返回数据', value: result.unknown }],
-    rows: result.rows.length ? result.rows.map(r => ({ title: r.name,
-      text: !r.known ? '未返回进度' : `${r.unlocked ? '图样已解锁 · 可锻造' : '未解锁'}${r.target != null ? `　${r.progress} / ${r.target}` : ''}` })) : [{ text: '本页没有符合条件的图样，可换筛选条件或查看上一页。' }],
-    notice: '默认优先展示正在收集的图样。发送「可锻造」「锻造 未解锁」或「锻造 第2页」切换。\n可锻造表示图样已解锁，实际塑形仍需材料和相应游戏权限。数据缓存最多 60 秒。' };
+  return { layout: 'crafting-poster', title: '武器图样 · 锻造进度', label: 'DESTINY 2', at: result.at,
+    subtitle: `${result.player.displayName} · ${command.filter || '全部图样'} · ${result.total} 件`,
+    playerName: result.player.displayName, filter: command.filter || '', legacyPage: command.page > 1,
+    patterns: result.rows, unlocked: result.unlocked, locked: result.locked, unknown: result.unknown,
+    source: '数据及游戏图片 © Bungie · 图样进度缓存最多 60 秒' };
 }
 
 export async function queryCard(command, { memes, destiny, live, config, bindings }, { userKey } = {}) {

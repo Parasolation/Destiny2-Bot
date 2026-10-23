@@ -2,11 +2,14 @@ import { UserError } from './http.js';
 
 export const CRAFTING_PAGE_SIZE = 20;
 
-export function buildCraftingIndex(records, objectives) {
+export function buildCraftingIndex(records, objectives, enrich = () => ({})) {
   // Bungie's CraftingRecipeUnlocked toast identifies weapon pattern records.
   return Object.values(records).filter(r => !r.redacted && !r.blacklisted && r.completionInfo?.toastStyle === 8 && r.displayProperties?.name)
-    .map(r => ({ hash: String(r.hash), name: r.displayProperties.name, description: r.displayProperties.description || '',
-      objectives: (r.objectiveHashes || []).map(hash => ({ hash: String(hash), target: objectives[hash]?.completionValue ?? null })) }));
+    .map(r => {
+      const pattern = { hash: String(r.hash), name: r.displayProperties.name, icon: r.displayProperties.icon || '', description: r.displayProperties.description || '',
+        objectives: (r.objectiveHashes || []).map(hash => ({ hash: String(hash), target: objectives[hash]?.completionValue ?? null })) };
+      return { ...pattern, ...enrich(pattern) };
+    });
 }
 
 function stateOf(pattern, record) {
@@ -43,18 +46,28 @@ export function patternProgress(patterns, profile) {
   });
 }
 
-export function craftingPage(allRows, filter = '', page = 1) {
+export function craftingPage(allRows, filter = '', page = 1, full = false) {
   const normalize = s => String(s).normalize('NFKC').toLowerCase().replace(/\s+/g, '');
   const query = normalize(filter);
   const rows = allRows.filter(row => {
     if (['可锻造', '已解锁'].includes(query)) return row.known && row.unlocked;
     if (query === '未解锁') return row.known && !row.unlocked;
     if (query === '进行中') return row.known && !row.unlocked && row.progress > 0;
-    return !query || query === '全部' || normalize(row.name).includes(query);
+    return !query || query === '全部' || normalize(row.name).includes(query) || normalize(row.group?.name || '').includes(query);
   });
   const order = r => !r.known ? 3 : r.unlocked ? 2 : r.progress > 0 ? 0 : 1;
   rows.sort((a, b) => order(a) - order(b) || (b.progress || 0) / (b.target || 1) - (a.progress || 0) / (a.target || 1) || a.name.localeCompare(b.name, 'zh-CN'));
-  return { rows: rows.slice((page - 1) * CRAFTING_PAGE_SIZE, page * CRAFTING_PAGE_SIZE), total: rows.length,
+  return { rows: full ? rows : rows.slice((page - 1) * CRAFTING_PAGE_SIZE, page * CRAFTING_PAGE_SIZE), total: rows.length,
     unlocked: allRows.filter(r => r.known && r.unlocked).length, locked: allRows.filter(r => r.known && !r.unlocked).length,
     unknown: allRows.filter(r => !r.known).length };
+}
+
+export function groupPatterns(rows) {
+  const groups = new Map();
+  for (const row of rows) {
+    const source = row.group || { name: '来源待确认', kind: '其他来源', order: 140, background: '' };
+    if (!groups.has(source.name)) groups.set(source.name, { ...source, rows: [] });
+    groups.get(source.name).rows.push(row);
+  }
+  return [...groups.values()].sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, 'zh-CN'));
 }

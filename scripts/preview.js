@@ -22,8 +22,8 @@ try {
   };
   for (const [name, card] of Object.entries(cards)) {
     const images = await renderer.render(card);
-    for (let i = 0; i < images.length; i++) await writeFile(path.join(OUTPUT, `${name}-${i + 1}.png`), images[i]);
-    console.log(`${name}: ${images.length} 张 PNG`);
+    for (let i = 0; i < images.length; i++) await writeFile(path.join(OUTPUT, `${name}-${i + 1}.${images[i][0] === 255 ? 'jpg' : 'png'}`), images[i]);
+    console.log(`${name}: ${images.length} 张图片`);
   }
   console.log(`图片已保存到 ${OUTPUT}`);
 } catch (e) { console.error(e.message); process.exitCode = 1; }

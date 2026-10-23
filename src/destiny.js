@@ -3,6 +3,7 @@ import path from 'node:path';
 import { DATA } from './config.js';
 import { CachedRequests, jsonRequest, UserError } from './http.js';
 import { buildCraftingIndex, patternProgress, craftingPage } from './crafting.js';
+import { buildPatternSources } from './crafting-sources.js';
 
 const ORIGIN = 'https://www.bungie.net';
 const compact = value => String(value || '').normalize('NFKC').toLowerCase().replace(/\s+/g, '');
@@ -47,14 +48,17 @@ export class DestinyService {
     const components = manifest.jsonWorldComponentContentPaths?.[this.config.language || 'zh-chs'];
     if (!components) throw new UserError('Bungie 暂未提供所选语言的数据库。');
     const tables = {};
-    for (const name of ['DestinyInventoryItemDefinition', 'DestinySandboxPerkDefinition', 'DestinyStatDefinition', 'DestinyRecordDefinition', 'DestinyObjectiveDefinition']) {
+    for (const name of ['DestinyInventoryItemDefinition', 'DestinySandboxPerkDefinition', 'DestinyStatDefinition', 'DestinyRecordDefinition', 'DestinyObjectiveDefinition', 'DestinyCollectibleDefinition', 'DestinyPresentationNodeDefinition', 'DestinyActivityDefinition', 'DestinySeasonDefinition']) {
       const location = new URL(components[name], ORIGIN);
       if (location.origin !== ORIGIN || !location.pathname.startsWith('/common/')) throw new UserError('Bungie 数据库地址异常。');
       log(`正在下载 ${name}，首次下载可能需要几分钟……`);
       tables[name] = await this.request(location.href, { timeout: 180000, maxBytes: 300_000_000 });
     }
     const index = { ...buildIndex(tables.DestinyInventoryItemDefinition, tables.DestinySandboxPerkDefinition, tables.DestinyStatDefinition),
-      patterns: buildCraftingIndex(tables.DestinyRecordDefinition, tables.DestinyObjectiveDefinition),
+      patterns: buildCraftingIndex(tables.DestinyRecordDefinition, tables.DestinyObjectiveDefinition, buildPatternSources({
+        items: tables.DestinyInventoryItemDefinition, collectibles: tables.DestinyCollectibleDefinition, nodes: tables.DestinyPresentationNodeDefinition,
+        activities: tables.DestinyActivityDefinition, seasons: tables.DestinySeasonDefinition })),
+      craftingLayoutVersion: 1,
       version: manifest.version, syncedAt: Date.now(), language: this.config.language || 'zh-chs' };
     if (!index.weapons.length || !index.perks.length || !index.patterns.length) throw new UserError('Bungie 返回的数据库为空，保留原缓存。');
     await mkdir(this.directory, { recursive: true });
@@ -104,7 +108,7 @@ export class DestinyService {
     const index = await this.load();
     if (!index.patterns?.length) throw new UserError('本地图样数据库需要更新，请运行 05-sync-destiny.cmd 并重启机器人。');
     const profile = await this.profile(player, '100,900');
-    const result = craftingPage(patternProgress(index.patterns, profile), filter, page);
+    const result = craftingPage(patternProgress(index.patterns, profile), filter, page, true);
     const minted = Date.parse(profile.secondaryComponentsMintedTimestamp || profile.responseMintedTimestamp);
     return { ...result, at: Number.isFinite(minted) ? minted : Date.now(), player };
   }

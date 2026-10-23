@@ -32,7 +32,7 @@ try {
   const name = command.type === 'meme' ? `actual-${command.mode}` : `actual-${command.type}`;
   const images = await renderer.render(card);
   for (let i = 0; i < images.length; i++) {
-    const file = path.join(OUTPUT, `${name}-${i + 1}.png`);
+    const file = path.join(OUTPUT, `${name}-${i + 1}.${images[i][0] === 255 ? 'jpg' : 'png'}`);
     await writeFile(file, images[i]); console.log(file);
   }
 } catch (e) { console.error(e.message); process.exitCode = 1; }
