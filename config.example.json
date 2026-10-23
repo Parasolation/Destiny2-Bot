@@ -1,0 +1,23 @@
+{
+  "botName": "守护者助手",
+  "qq": {
+    "appId": "",
+    "appSecret": "",
+    "allowedGroupIds": []
+  },
+  "bungie": {
+    "apiKey": "",
+    "language": "zh-chs"
+  },
+  "douyu": {
+    "enabled": true,
+    "roomId": "6657",
+    "windowMinutes": 5,
+    "topN": 8,
+    "blockedWords": []
+  },
+  "limits": {
+    "perUserCooldownSeconds": 10,
+    "maxPendingQueries": 8
+  }
+}
