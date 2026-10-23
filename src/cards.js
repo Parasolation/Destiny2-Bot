@@ -4,6 +4,7 @@ import { BungieAssets } from './bungie-assets.js';
 import { renderCraftingPoster } from './crafting-poster.js';
 import { renderEquipmentCard } from './equipment-cards.js';
 import { renderReportCard } from './report-cards.js';
+import { renderPvpCard } from './pvp-card.js';
 
 export const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, x => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[x]);
 export const dateTime = value => new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', dateStyle: 'short', timeStyle: 'medium', hour12: false }).format(value ?? Date.now());
@@ -49,6 +50,7 @@ export class CardRenderer {
     if (card.layout === 'crafting-poster') return renderCraftingPoster(this.browser, card, this.assets, this.botName);
     if (['weapon-detail','perk-detail'].includes(card.layout)) return renderEquipmentCard(this.browser,card,this.assets,this.botName);
     if (card.layout === 'guardian-report') return renderReportCard(this.browser,card,this.assets,this.botName);
+    if (card.layout === 'pvp-stat-report') return renderPvpCard(this.browser,card,this.assets,this.botName);
     const context = await this.browser.newContext({ viewport: { width: 960, height: 1800 }, deviceScaleFactor: 1, javaScriptEnabled: false });
     await context.route('**/*', route => route.abort());
     const page = await context.newPage();

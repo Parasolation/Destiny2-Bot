@@ -1,5 +1,6 @@
 import { UserError } from './http.js';
 import { MODES, className, number, value, duration, date, day, mergeHistory, activityRow, statTiles, recordState, collectibleState } from './report-data.js';
+import { buildPvpCard } from './pvp-data.js';
 
 const normalize = text => String(text || '').normalize('NFKC').toLowerCase().replace(/\s+/g, '');
 const weaponNames = { AutoRifle: '自动步枪', HandCannon: '手炮', PulseRifle: '脉冲步枪', ScoutRifle: '斥候步枪', FusionRifle: '融合步枪', Sniper: '狙击步枪', Shotgun: '霰弹枪', MachineGun: '机枪', RocketLauncher: '火箭发射器', SideArm: '手枪', Sword: '刀剑', Submachinegun: '微型冲锋枪', GrenadeLauncher: '榴弹发射器', Bow: '弓', TraceRifle: '追踪步枪', Glaive: '偃月' };
@@ -54,6 +55,29 @@ export class GuardianReports {
     }));
     return { rows: results.filter(x => x.status === 'fulfilled').flatMap(x => x.value).sort((a,b) => b.sort - a.sort), partial: results.some(x => x.status === 'rejected') };
   }
+  async pvpDetails(player, rows, {budgetMs = 18000} = {}) {
+    const enriched=rows.map(row=>({...row,precision:null,weapons:[]}));
+    let next=0;const deadline=Date.now()+budgetMs;
+    await Promise.all(Array.from({length:Math.min(4,enriched.length)},async()=>{
+      while(next<enriched.length && Date.now()<deadline) {
+        const row=enriched[next++],id=String(row.activityDetails.instanceId);
+        if (!/^\d{1,20}$/.test(id)) continue;
+        try {
+          const report=await this.destiny.cache.get('pgcr:'+id,300000,()=>this.destiny.api(`/Destiny2/Stats/PostGameCarnageReport/${id}/`,{timeout:6000}));
+          const entry=(report.entries || []).find(entry=>String(entry.characterId)===String(row.character?.characterId)
+            && String(entry.player?.destinyUserInfo?.membershipId)===String(player.membershipId));
+          const precision=value(entry?.extended?.values,'precisionKills');
+          if(precision != null && precision>=0) row.precision=precision;
+          row.weapons=entry?.extended?.weapons || [];
+        } catch { /* History remains useful when a battle report is unavailable. */ }
+      }
+    }));
+    return enriched;
+  }
+  async pvpBreakdown(player) {
+    const path=this.accountPath(player)+'/Character/0/Stats/?modes=69,70,84,19,48&groups=1,2';
+    return this.destiny.cache.get(path,60000,()=>this.destiny.api(path));
+  }
   async combat(nameOrBinding, mode = 'all', page = 1) {
     const maxPage = ['raid','dungeon'].includes(mode) ? 50 : 5;
     if (!MODES[mode] || page < 1 || page > maxPage) throw new UserError('近期战绩每页 20 条，支持第 1–5 页；突袭／地牢累计可继续翻页。');
@@ -64,6 +88,13 @@ export class GuardianReports {
     ]);
     const stats = statsResult.stats, competitive = ['pvp','trials','iron','gambit'].includes(mode);
     const rows = recent.rows.slice((page - 1) * 20, page * 20);
+    if (['pvp','trials','iron'].includes(mode)) {
+      const [details,breakdown]=await Promise.all([
+        this.pvpDetails(player,rows),
+        mode==='pvp' ? this.pvpBreakdown(player).then(data=>({data}),()=>({failed:true})) : Promise.resolve({}),
+      ]);
+      return buildPvpCard({player,definition,stats,statsOk:statsResult.ok,recent:{rows:details,partial:recent.partial,more:page<5 && (recent.rows.length>page*20 || recent.capped)},page,catalog,breakdown:breakdown.data,breakdownFailed:breakdown.failed});
+    }
     const card = this.base(definition.title, player, { eyebrow: definition.en, background: catalog.activities[rows[0]?.activityDetails.referenceId]?.background,
       accent: competitive ? 'red' : 'teal', metrics: mode === 'all' ? [] : statTiles(stats, competitive) });
     if (mode !== 'all') {

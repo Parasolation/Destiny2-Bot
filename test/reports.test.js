@@ -68,10 +68,10 @@ test('populated PvP reports use aggregate stats, actual standings and stable 20-
   const destiny={load:async()=>({reportVersion:1,reportCatalog:catalog}),player:async()=>({player,characters:[{characterId:'9',classType:1}]}),validateMembership(){},cache:new CachedRequests(),api:async path=>{
     calls.push(path);
     if(path.includes('/Activities/'))return {activities:Array.from({length:41},(_,i)=>({period:new Date(Date.UTC(2026,9,24)-i*600000).toISOString(),activityDetails:{instanceId:String(i+1),referenceId:2,modes:[5]},values:values({kills:12,deaths:4,assists:5,standing:i%2,completed:1})}))};
-    return {mergedAllCharacters:{results:{allPvP:{allTime:values({activitiesEntered:40,activitiesWon:25,kills:480,deaths:160,killsDeathsRatio:3,efficiency:4.25})}}}};
+    return {mergedAllCharacters:{results:{allPvP:{allTime:values({activitiesEntered:40,activitiesWon:25,kills:480,deaths:160,assists:200,killsDeathsRatio:3,efficiency:4.25})}}}};
   }};
   const report=await new GuardianReports(destiny).combat(player,'pvp',2);
-  assert.equal(report.metrics[0].value,'40');assert.match(report.sections[0].text,/62.5%/);
-  const rows=report.sections.at(-1).rows;assert.equal(rows.length,20);assert.match(rows[0].meta,/对局 21/);assert.equal(rows[0].badge,'胜利');assert.equal(rows[1].badge,'失败');
+  assert.equal(report.layout,'pvp-stat-report');assert.equal(report.totals[0].value,'40');assert.equal(report.headline[4].value,'62.50%');
+  const rows=report.matches;assert.equal(rows.length,20);assert.equal(rows[0].id,'21');assert.equal(rows[0].result,'胜');assert.equal(rows[1].result,'负');
   assert.ok(calls.some(x=>x.endsWith('?count=41&mode=5&page=0')));
 });
