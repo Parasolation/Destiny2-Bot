@@ -21,7 +21,7 @@ try {
   let card;
   if (command.type === 'meme' && command.mode === 'live') {
     const existing = process.env.BOT_USE_SAVED_SAMPLE === '1';
-    if (existing) card = JSON.parse(await readFile(path.join(OUTPUT, 'live-check.json'), 'utf8'));
+    if (existing) card = { ...JSON.parse(await readFile(path.join(OUTPUT, 'live-check.json'), 'utf8')), layout: 'barrage-poster' };
     else {
       stop = await startCollector(config.douyu, live);
       console.log('采集 30 秒后生成实时图片（实际统计时段会标在图片上）……');

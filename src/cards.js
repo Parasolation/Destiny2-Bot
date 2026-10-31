@@ -30,8 +30,23 @@ export function cardHtml(card, rows = card.rows || [], { botName = '守护者助
     <div class="rows">${rows.map(r => `<section class="row">${r.rank != null ? `<div class="rank">${e(String(r.rank).padStart(2,'0'))}</div>` : ''}<div class="body">${r.title ? `<div class="title">${e(r.title)}</div>` : ''}<div class="text">${e(r.text)}</div>${r.meta ? `<div class="meta">${e(r.meta)}</div>` : ''}</div></section>`).join('')}</div>
     ${card.notice ? `<div class="notice">${e(card.notice)}</div>` : ''}
     <footer class="footer">${card.demo ? '<div class="demo">演示数据 · 仅展示图片样式，不代表当前真实结果</div>' : ''}<div>来源：${e(card.source || '机器人本地状态')}</div>
-    <div class="bottom"><span>${e(dateTime(card.at))} · 北京时间</span><span>${page} / ${pages}</span></div></footer>
+    <div class="bottom"><span>${e(dateTime(card.at))} · 北京时间</span><span>${card.layout === 'barrage-poster' ? '整页长图' : `${page} / ${pages}`}</span></div></footer>
   </main></body></html>`;
+}
+
+async function renderBarragePoster(page, card, botName) {
+  await page.setContent(cardHtml(card, card.rows, { botName }), { waitUntil: 'load' });
+  const poster = page.locator('.card');
+  // Reflow very dense pages before capturing, so the last entry stays on the same image.
+  for (const zoom of [1, 0.8, 0.6]) {
+    if (zoom !== 1) await page.addStyleTag({ content: `.card { zoom: ${zoom} }` });
+    if ((await poster.boundingBox()).height > 16000) continue;
+    for (const quality of [92, 76, 58]) {
+      const image = await poster.screenshot({ type: 'jpeg', quality, animations: 'disabled', timeout: 30000 });
+      if (image.length <= 4_500_000) return [image];
+    }
+  }
+  throw new Error('完整弹幕榜超过单张图片的发送限制。');
 }
 
 export class CardRenderer {
@@ -56,6 +71,7 @@ export class CardRenderer {
     const page = await context.newPage();
     page.setDefaultTimeout(10000);
     try {
+      if (card.layout === 'barrage-poster') return await renderBarragePoster(page, card, this.botName);
       const rows = (card.rows || []).flatMap(row => {
         const chars = Array.from(String(row.text || '').slice(0, 2000));
         if (!chars.length) return [row];

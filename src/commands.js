@@ -52,14 +52,14 @@ export function helpCard() {
       { title: '守护者档案', text: '生涯　/　热力图　/　配装　/　队伍\n称号　/　成就 关键词　/　收藏 关键词\n周报', meta: '战绩、生涯、热力图、配装和队伍可追加 Bungie名称#1234 查其他公开账号。' },
       { title: '命运 2 武器与图样', text: '武器 武器名称　/　Perk 词条名称\n锻造 武器名或副本名　/　锻造 进行中\n锻造 未解锁　/　可锻造', meta: '武器显示大图、属性与词条池；锻造按副本、赛季分组合成长图。' },
       { title: '玩机器烂梗与实时弹幕', text: '热门　/　周榜　/　随机\n搜索 关键词　/　实时', meta: '列表最多 20 条；随机 5 条。来源不足时按实际数量展示。' },
-      { title: '翻页与运行状态', text: '周榜 第2页　/　搜索 关键词 第2页\n状态', meta: '全部图片回复；较长内容会分图。' },
+      { title: '翻页与运行状态', text: '周榜 第2页　/　搜索 关键词 第2页\n状态', meta: '弹幕榜每页发一张完整长图。' },
     ] };
 }
 
 export function liveCard(snapshot, config) {
-  if (!snapshot.connected) return { title: '实时弹幕暂不可用', label: '6657 LIVE', source: `斗鱼 ${config.roomId} 房间 · 本机采集`, at: snapshot.at,
+  if (!snapshot.connected) return { layout: 'barrage-poster', title: '实时弹幕暂不可用', label: '6657 LIVE', source: `斗鱼 ${config.roomId} 房间 · 本机采集`, at: snapshot.at,
     rows: [{ text: snapshot.state }], notice: '连接恢复后会重新开始统计。此时不展示旧排行榜。' };
-  return { title: '6657 实时弹幕热榜', label: '6657 LIVE', compact: true, at: snapshot.at, source: `斗鱼 ${config.roomId} 房间 · 本机采集`,
+  return { layout: 'barrage-poster', title: '6657 实时弹幕热榜', label: '6657 LIVE', compact: true, at: snapshot.at, source: `斗鱼 ${config.roomId} 房间 · 本机采集`,
     subtitle: `${dateTime(snapshot.start)} — ${dateTime(snapshot.at)}`,
     stats: [{ label: '采集到的弹幕', value: snapshot.count }, { label: '参与账号', value: snapshot.users }, { label: '目标统计窗口', value: `${config.windowMinutes} 分钟` }],
     rows: snapshot.rows.length ? snapshot.rows.map((x, i) => ({ rank: i + 1, text: x.text, meta: `${x.users} 人参与  ·  ${x.count} 次出现` })) : [{ text: '这段时间还没有收到符合条件的弹幕。' }],
@@ -120,7 +120,7 @@ export async function queryCard(command, { memes, destiny, live, config, binding
     if (command.mode === 'live') return liveCard(live.snapshot(), config.douyu);
     const result = await memes.query(command.mode, command.keyword, command.page);
     const titles = { hot: '6657 · 24 小时热门', week: '6657 · 近 7 天热门', random: '6657 · 随机烂梗', search: `6657 · ${command.keyword}` };
-    return { title: titles[command.mode], label: '6657 MEMES', compact: true, at: result.fetchedAt, source: 'sb6657.cn · 玩机器烂梗库',
+    return { layout: 'barrage-poster', title: titles[command.mode], label: '6657 MEMES', compact: true, at: result.fetchedAt, source: 'sb6657.cn · 玩机器烂梗库',
       subtitle: command.mode === 'random' ? `本次随机 ${result.rows.length} 条` : `第 ${command.page} 页 · 本次 ${result.rows.length} 条 / 共 ${result.total} 条 · 缓存最多 60 秒`,
       rows: result.rows.length ? result.rows.map((x, i) => ({ rank: command.mode === 'random' ? i + 1 : (command.page - 1) * MEME_PAGE_SIZE + i + 1, text: x.text,
         meta: `网站复制次数 ${x.copies}  ·  编号 ${x.id}` })) : [{ text: '没有找到结果，试试其他关键词或上一页。' }],
