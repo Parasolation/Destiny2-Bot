@@ -1,6 +1,7 @@
 import { UserError } from './http.js';
 import { dateTime } from './cards.js';
 import { MEME_PAGE_SIZE } from './memes.js';
+import { EXTRA_RANKINGS } from './meme-extra-rankings.js';
 
 export function parseCommand(input) {
   let text = String(input ?? '').replace(/<@!?[^>]+>/g, '').trim().replace(/^[/／]/, '').trim();
@@ -11,6 +12,10 @@ export function parseCommand(input) {
   if (page < 1 || page > 50) throw new UserError('页码范围是 1–50。');
   if (/^(帮助|菜单|help)$/i.test(text)) return { type: 'help' };
   if (/^(状态|status)$/i.test(text)) return { type: 'status' };
+  if (/^(?:6657\s*)?all(?:\s|$)/i.test(text)) {
+    if (!/^(?:6657\s*)?all$/i.test(text) || pagination) throw new UserError('直接发送「all」即可查看完整榜单。');
+    return { type: 'meme', mode: 'all', keyword: '', page: 1 };
+  }
   if (/^(周报|本周|周活动)$/.test(text)) return { type: 'weekly' };
   if (/^(上一局|最近一局)$/.test(text)) return {type:'lastMatch',keyword:''};
   const report = text.match(/^(pvp(?:战绩)?|pve(?:战绩)?|战绩|近期战绩|近期对局|突袭(?:战绩)?|地牢(?:战绩)?|试炼(?:战绩)?|奥西里斯试炼|智谋(?:战绩)?|日落(?:战绩)?|铁旗(?:战绩)?)(?:\s+(.+))?$/i);
@@ -51,7 +56,7 @@ export function helpCard() {
       { title: '战绩与副本报告', text: 'PVP　/　PVE　/　战绩\n突袭　/　地牢　/　试炼　/　铁旗\n智谋　/　日落　/　上一局　/　对局 活动编号', meta: 'PVP 含 KDA、爆头率、分模式与武器统计；近期 20 场一页，最多 5 页。' },
       { title: '守护者档案', text: '生涯　/　热力图　/　配装　/　队伍\n称号　/　成就 关键词　/　收藏 关键词\n周报', meta: '战绩、生涯、热力图、配装和队伍可追加 Bungie名称#1234 查其他公开账号。' },
       { title: '命运 2 武器与图样', text: '武器 武器名称　/　Perk 词条名称\n锻造 武器名或副本名　/　锻造 进行中\n锻造 未解锁　/　可锻造', meta: '武器显示大图、属性与词条池；锻造按副本、赛季分组合成长图。' },
-      { title: '玩机器烂梗与实时弹幕', text: '热门　/　周榜　/　随机\n搜索 关键词　/　实时', meta: '列表最多 20 条；随机 5 条。来源不足时按实际数量展示。' },
+      { title: '玩机器烂梗与实时弹幕', text: 'all　/　热门　/　周榜　/　随机\n搜索 关键词　/　实时', meta: 'all 合并完整网站热榜和当前直播热榜。单查网站榜每页最多 20 条。' },
       { title: '翻页与运行状态', text: '周榜 第2页　/　搜索 关键词 第2页\n状态', meta: '弹幕榜每页发一张完整长图。' },
     ] };
 }
@@ -65,6 +70,40 @@ export function liveCard(snapshot, config) {
     rows: snapshot.rows.length ? snapshot.rows.map((x, i) => ({ rank: i + 1, text: x.text, meta: `${x.users} 人参与  ·  ${x.count} 次出现` })) : [{ text: '这段时间还没有收到符合条件的弹幕。' }],
     notice: [!snapshot.complete ? '尚未覆盖完整统计窗口，仅展示上述实际采集时段。' : '', snapshot.capped ? '消息量超过缓存上限，本次为部分样本。' : '',
       '按参与人数、出现次数排序；合并大小写和空白差异，过滤重复消息 ID。不代表平台全量统计。'].filter(Boolean).join('\n') };
+}
+
+function websiteRows(rows, offset = 0) {
+  return rows.map((item, index) => ({
+    rank: offset + index + 1, text: item.text,
+    meta: `网站复制次数 ${item.copies}  ·  编号 ${item.id}`,
+  }));
+}
+
+async function allBarrageCard(memes, live, config) {
+  const copyRankings = [
+    { mode: 'hot', title: '24 小时热门' },
+    { mode: 'week', title: '近 7 天周榜' },
+  ];
+  const copyRequests = copyRankings.map(async ({ mode, title }) => {
+    const { rows, fetchedAt } = await memes.ranking(mode);
+    return {
+      title, subtitle: `网站收录 ${rows.length} 条 · 获取于 ${dateTime(fetchedAt)}`,
+      rows: rows.length ? websiteRows(rows) : [{ text: '当前榜单暂无条目。' }],
+    };
+  });
+  const rankings = [...copyRankings, ...EXTRA_RANKINGS];
+  const results = await Promise.allSettled([...copyRequests, ...EXTRA_RANKINGS.map(({ mode }) => memes.extraRanking(mode))]);
+  const sections = results.map((result, index) => {
+    if (result.status === 'fulfilled') return result.value;
+    return { title: rankings[index].title, rows: [{ text: '本次未能取得此榜，稍后可重试。' }] };
+  });
+  const current = liveCard(live.snapshot(), config.douyu);
+  sections.push(current);
+  return {
+    layout: 'barrage-poster', title: '6657 弹幕总览', label: '6657 ALL', compact: true,
+    at: Date.now(), source: `sb6657.cn · 玩机器烂梗库 / 斗鱼 ${config.douyu.roomId} 直播间`,
+    subtitle: `${rankings.length} 个网站榜单  /  1 个直播间实时榜`, sections,
+  };
 }
 
 export function craftingCard(result, command) {
@@ -117,13 +156,13 @@ export async function queryCard(command, { memes, destiny, live, config, binding
     ] };
   }
   if (command.type === 'meme') {
+    if (command.mode === 'all') return allBarrageCard(memes, live, config);
     if (command.mode === 'live') return liveCard(live.snapshot(), config.douyu);
     const result = await memes.query(command.mode, command.keyword, command.page);
     const titles = { hot: '6657 · 24 小时热门', week: '6657 · 近 7 天热门', random: '6657 · 随机烂梗', search: `6657 · ${command.keyword}` };
     return { layout: 'barrage-poster', title: titles[command.mode], label: '6657 MEMES', compact: true, at: result.fetchedAt, source: 'sb6657.cn · 玩机器烂梗库',
       subtitle: command.mode === 'random' ? `本次随机 ${result.rows.length} 条` : `第 ${command.page} 页 · 本次 ${result.rows.length} 条 / 共 ${result.total} 条 · 缓存最多 60 秒`,
-      rows: result.rows.length ? result.rows.map((x, i) => ({ rank: command.mode === 'random' ? i + 1 : (command.page - 1) * MEME_PAGE_SIZE + i + 1, text: x.text,
-        meta: `网站复制次数 ${x.copies}  ·  编号 ${x.id}` })) : [{ text: '没有找到结果，试试其他关键词或上一页。' }],
+      rows: result.rows.length ? websiteRows(result.rows, command.mode === 'random' ? 0 : (command.page - 1) * MEME_PAGE_SIZE) : [{ text: '没有找到结果，试试其他关键词或上一页。' }],
       notice: '此处为网站烂梗数据。直播间当前热榜请发送「实时」。列表翻页示例：「周榜 第2页」。' };
   }
   if (command.type === 'player') {

@@ -9,8 +9,10 @@ import { renderPvpCard } from './pvp-card.js';
 export const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, x => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[x]);
 export const dateTime = value => new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', dateStyle: 'short', timeStyle: 'medium', hour12: false }).format(value ?? Date.now());
 
-export function cardHtml(card, rows = card.rows || [], { botName = '守护者助手', page = 1, pages = 1 } = {}) {
+export function cardHtml(card, rows = card.rows || [], { botName = '守护者助手', page = 1, pages = 1, zoom = 1 } = {}) {
   const e = escapeHtml;
+  const statsHtml = (stats = []) => stats.length ? `<div class="stats">${stats.map(s => `<div class="stat"><div class="value">${e(s.value)}</div><div class="key">${e(s.label)}</div></div>`).join('')}</div>` : '';
+  const rowsHtml = items => `<div class="rows">${items.map(r => `<section class="row">${r.rank != null ? `<div class="rank">${e(String(r.rank).padStart(2,'0'))}</div>` : ''}<div class="body">${r.title ? `<div class="title">${e(r.title)}</div>` : ''}<div class="text">${e(r.text)}</div>${r.meta ? `<div class="meta">${e(r.meta)}</div>` : ''}</div></section>`).join('')}</div>`;
   return `<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
   <style>
@@ -23,11 +25,12 @@ export function cardHtml(card, rows = card.rows || [], { botName = '守护者助
     .rows{margin-top:26px;display:flex;flex-direction:column;gap:14px}.row{background:#152238;border:1px solid #263b54;border-radius:16px;padding:21px 24px;display:flex;gap:18px;break-inside:avoid}.rank{font-size:28px;min-width:35px;color:#63e8c4;font-weight:700;font-variant-numeric:tabular-nums}.body{min-width:0;flex:1}.title{font-size:24px;font-weight:700;line-height:1.5;overflow-wrap:anywhere}.text{font-size:23px;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere}.title+.text{margin-top:8px;color:#dce5f5}.meta{margin-top:12px;font-size:17px;color:#91a8c3;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere}
     .notice{font-size:19px;line-height:1.6;color:#f2d398;margin-top:24px;white-space:pre-wrap;overflow-wrap:anywhere}.footer{border-top:1px solid #293b51;margin-top:28px;padding-top:20px;font-size:16px;line-height:1.8;color:#8fa5c1;overflow-wrap:anywhere}.bottom{display:flex;justify-content:space-between}.demo{color:#ffd891;font-weight:bold}
     .compact .rows{gap:10px}.compact .row{padding:13px 20px}.compact .text{font-size:21px;line-height:1.5}.compact .title{font-size:22px}.compact .title+.text{margin-top:3px}.compact .meta{margin-top:6px}.compact .notice{font-size:17px}
-  </style></head><body><main class="card${card.compact ? ' compact' : ''}">
+    .board{margin-top:32px}.board h2{margin:0 0 8px;padding-left:14px;border-left:5px solid #63e8c4;font-size:30px;overflow-wrap:anywhere}.board .subtitle{font-size:18px}.board .rows{margin-top:15px;gap:6px}.board .row{padding:10px 18px}.board .meta{margin-top:2px}
+  </style></head><body><main class="card${card.compact ? ' compact' : ''}" style="zoom:${Number(zoom)}">
     <div class="top"><span><i class="mark"></i>${e(botName)}</span><span class="label">${e(card.label || '查询结果')}</span></div>
     <h1>${e(card.title)}</h1><div class="subtitle">${e(card.subtitle || '')}</div>
-    ${card.stats?.length ? `<div class="stats">${card.stats.map(s => `<div class="stat"><div class="value">${e(s.value)}</div><div class="key">${e(s.label)}</div></div>`).join('')}</div>` : ''}
-    <div class="rows">${rows.map(r => `<section class="row">${r.rank != null ? `<div class="rank">${e(String(r.rank).padStart(2,'0'))}</div>` : ''}<div class="body">${r.title ? `<div class="title">${e(r.title)}</div>` : ''}<div class="text">${e(r.text)}</div>${r.meta ? `<div class="meta">${e(r.meta)}</div>` : ''}</div></section>`).join('')}</div>
+    ${statsHtml(card.stats)}
+    ${card.sections ? card.sections.map(section => `<section class="board"><h2>${e(section.title)}</h2><div class="subtitle">${e(section.subtitle)}</div>${statsHtml(section.stats)}${rowsHtml(section.rows)}${section.notice ? `<div class="notice">${e(section.notice)}</div>` : ''}</section>`).join('') : rowsHtml(rows)}
     ${card.notice ? `<div class="notice">${e(card.notice)}</div>` : ''}
     <footer class="footer">${card.demo ? '<div class="demo">演示数据 · 仅展示图片样式，不代表当前真实结果</div>' : ''}<div>来源：${e(card.source || '机器人本地状态')}</div>
     <div class="bottom"><span>${e(dateTime(card.at))} · 北京时间</span><span>${card.layout === 'barrage-poster' ? '整页长图' : `${page} / ${pages}`}</span></div></footer>
@@ -35,11 +38,10 @@ export function cardHtml(card, rows = card.rows || [], { botName = '守护者助
 }
 
 async function renderBarragePoster(page, card, botName) {
-  await page.setContent(cardHtml(card, card.rows, { botName }), { waitUntil: 'load' });
   const poster = page.locator('.card');
   // Reflow very dense pages before capturing, so the last entry stays on the same image.
   for (const zoom of [1, 0.8, 0.6]) {
-    if (zoom !== 1) await page.addStyleTag({ content: `.card { zoom: ${zoom} }` });
+    await page.setContent(cardHtml(card, card.rows, { botName, zoom }), { waitUntil: 'load' });
     if ((await poster.boundingBox()).height > 16000) continue;
     for (const quality of [92, 76, 58]) {
       const image = await poster.screenshot({ type: 'jpeg', quality, animations: 'disabled', timeout: 30000 });
