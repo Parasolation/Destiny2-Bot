@@ -30,7 +30,7 @@ test('a 20-entry barrage page sends one full-height image including the final lo
   t.after(() => renderer.close());
   const sent = [];
   const handler = createMessageHandler({
-    bot: { sendImage: (target, payload) => sent.push({ target, payload }) },
+    bot: { uploadMedia: async ({ target, buffer }) => { sent.push({ target, payload: { buffer } }); return { file_info: 'test-file' }; }, send: async () => ({ id: 'test-message' }) },
     renderer, services, admission: new Admission(),
     fallbackImages: { error: [Buffer.from('render error')] },
     logger: { error: message => assert.fail(message) },

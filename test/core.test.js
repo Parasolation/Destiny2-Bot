@@ -116,7 +116,7 @@ test('all replies are images tied to the original message, including service err
   const sent = [], cards = [], logs = [];
   const target = { scope: 'group', targetId: 'g', msgId: 'original' };
   const handler = createMessageHandler({
-    bot: { sendImage: async (...args) => sent.push(args) },
+    bot: { uploadMedia: async ({ target, buffer }) => { sent.push([target, { buffer }]); return { file_info: 'test-file' }; }, send: async () => ({ id: 'test-message' }) },
     renderer: { render: async card => { cards.push(card); return [Buffer.from('png')]; } },
     services: { config: { qq: { allowedGroupIds: [] } }, memes: { query: async () => { throw new UserError('数据源维护'); } } },
     admission: new Admission(), fallbackImages: { cooldown: [Buffer.from('cooldown')] }, logger: { error: x => logs.push(x) },

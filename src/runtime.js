@@ -1,6 +1,7 @@
 import { parseCommand, queryCard } from './commands.js';
 import { UserError } from './http.js';
 import { bindingKey } from './bindings.js';
+import { sendQQImage } from './qq-media.js';
 
 export class Admission {
   constructor({ cooldownSeconds = 10, maxPending = 8, clock = Date.now } = {}) {
@@ -50,10 +51,13 @@ export function createMessageHandler({ bot, renderer, services, admission, fallb
         catch { logger.error('图片排版失败。'); images = fallbackImages.error; }
       }
       // At most three native media messages, always tied to the triggering message.
-      for (const buffer of images.slice(0, 3)) await bot.sendImage(target, { buffer });
-      logger.info?.(`QQ 图片回复成功（${Math.min(images.length, 3)} 张）。`);
+      for (const [index, buffer] of images.slice(0, 3).entries()) {
+        logger.info?.(`QQ 准备图片回复（第 ${index + 1} 张，${buffer.length} 字节）。`);
+        const { receipt } = await sendQQImage(bot, target, { buffer });
+        logger.info?.(`QQ 接口已返回图片消息回执（第 ${index + 1} 张，回执摘要 ${receipt}）；群内显示需实际确认。`);
+      }
     } catch (e) {
-      logger.error(`QQ 图片发送失败${Number.isFinite(e.bizCode) ? `，错误码 ${e.bizCode}` : ''}。检查机器人权限、网络和上传额度。`);
+      logger.error(`QQ 图片回复失败${e.stage ? `（${e.stage}未取得有效回执）` : ''}${Number.isFinite(e.bizCode) ? `，错误码 ${e.bizCode}` : ''}${Number.isFinite(e.httpStatus) ? `，HTTP ${e.httpStatus}` : ''}。检查机器人权限、网络和上传额度。`);
     } finally { if (decision === 'ok') admission.leave(); }
   };
 }
